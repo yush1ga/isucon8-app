@@ -311,6 +311,7 @@ func (r *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
 }
 
 var db *sql.DB
+var SHEETS_TABLE = make([]Sheet, 0, 1000)
 
 func main() {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
@@ -323,6 +324,22 @@ func main() {
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if len(SHEETS_TABLE) == 0 {
+		rows, err := db.Query("SELECT * FROM sheets ORDER BY id ASC")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var sheet Sheet
+			if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
+				log.Fatal(err)
+			}
+			SHEETS_TABLE = append(SHEETS_TABLE, sheet)
+		}
+		log.Println(SHEETS_TABLE)
 	}
 
 	e := echo.New()
@@ -856,9 +873,8 @@ func main() {
 		}
 
 		rows, err := db.Query(`
-		SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price
+		SELECT r.*, e.price AS event_price
 		FROM reservations r
-		INNER JOIN sheets s ON s.id = r.sheet_id
 		INNER JOIN events e ON e.id = r.event_id
 		WHERE r.event_id = ?
 		ORDER BY reserved_at ASC
@@ -872,11 +888,11 @@ func main() {
 		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
 
 		var reservation Reservation
-		var sheet Sheet
 		for rows.Next() {
-			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.Price); err != nil {
+			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &event.Price); err != nil {
 				return err
 			}
+			sheet := SHEETS_TABLE[reservation.SheetID-1]
 			v := Report{
 				ReservationID: reservation.ID,
 				EventID:       event.ID,
@@ -902,9 +918,8 @@ func main() {
 	}, adminLoginRequired)
 	e.GET("/admin/api/reports/sales", func(c echo.Context) error {
 		rows, err := db.Query(`
-		SELECT r.*, s.rank as sheet_rank, s.num as sheet_num, s.price as sheet_price, e.id as event_id, e.price as event_price
+		SELECT r.*, e.id as event_id, e.price as event_price
 		FROM reservations r 
-		INNER JOIN sheets s on s.id = r.sheet_id
 		INNER JOIN events e on e.id = r.event_id
 		ORDER BY reserved_at ASC
 		for update
@@ -917,12 +932,12 @@ func main() {
 		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
 
 		var reservation Reservation
-		var sheet Sheet
 		var event Event
 		for rows.Next() {
-			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
+			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &event.ID, &event.Price); err != nil {
 				return err
 			}
+			sheet := SHEETS_TABLE[reservation.SheetID-1]
 			v := Report{
 				ReservationID: reservation.ID,
 				EventID:       event.ID,
