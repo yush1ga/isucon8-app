@@ -439,13 +439,13 @@ func main() {
 			return err
 		}
 
-		loginUser, err := getLoginUser(c)
-		if err != nil {
-			return err
-		}
-		if user.ID != loginUser.ID {
-			return resError(c, "forbidden", 403)
-		}
+		// loginUser, err := getLoginUser(c)
+		// if err != nil {
+		// 	return err
+		// }
+		// if user.ID != loginUser.ID {
+		// 	return resError(c, "forbidden", 403)
+		// }
 
 		rows, err := db.Query(`
 			SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num
@@ -528,7 +528,7 @@ func main() {
 			"total_price":         totalPrice,
 			"recent_events":       recentEvents,
 		})
-	}, loginRequired)
+	})
 	e.POST("/api/actions/login", func(c echo.Context) error {
 		var params struct {
 			LoginName string `json:"login_name"`
