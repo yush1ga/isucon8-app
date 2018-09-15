@@ -12,4 +12,5 @@ make
 # sudo systemctl daemon-reload
 sudo systemctl restart torb.go
 cp /var/log/nginx/access.log  ~/logs/access-`date +'%s'`-$CURRENT_REVISION.log
+cp /var/log/nginx/access.log  ~/logs/latest.log
 sudo bash -c 'echo > /var/log/nginx/access.log;'
