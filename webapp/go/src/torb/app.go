@@ -231,39 +231,56 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		"C": &Sheets{},
 	}
 
-	rows, err := db.Query("SELECT * FROM sheets ORDER BY `rank`, num")
+	sheets := []Sheet{}
+	rows, err := db.Query("SELECT * FROM sheets ORDER BY `id`, num")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var sheet Sheet
 		if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
 			return nil, err
 		}
-		event.Sheets[sheet.Rank].Price = event.Price + sheet.Price
-		event.Sheets[sheet.Rank].Total++
+		sheets = append(sheets, sheet)
+	}
 
+	rows, err = db.Query(`
+	SELECT *
+	FROM reservations
+	WHERE event_id = ? AND canceled_at IS NULL
+	HAVING reserved_at = MIN(reserved_at)
+	`, event.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	event.Total = 1000
+	event.Sheets["S"].Total = 50
+	event.Sheets["A"].Total = 150
+	event.Sheets["B"].Total = 300
+	event.Sheets["C"].Total = 500
+	for rows.Next() {
 		var reservation Reservation
-		err := db.QueryRow(`
-		SELECT * 
-		FROM reservations
-		WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL
-		HAVING reserved_at = MIN(reserved_at)
-		`, event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt)
+		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID,
+			&reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt)
 		if err == nil {
-			sheet.Mine = reservation.UserID == loginUserID
-			sheet.Reserved = true
-			sheet.ReservedAtUnix = reservation.ReservedAt.Unix()
-		} else if err == sql.ErrNoRows {
-			event.Remains++
-			event.Sheets[sheet.Rank].Remains++
+			event.Sheets[sheets[reservation.SheetID-1].Rank].Price = event.Price + sheets[reservation.SheetID-1].Price
+
+			sheets[reservation.SheetID-1].Mine = reservation.UserID == loginUserID
+			sheets[reservation.SheetID-1].Reserved = true
+			sheets[reservation.SheetID-1].ReservedAtUnix = reservation.ReservedAt.Unix()
 		} else {
 			return nil, err
 		}
-		event.Total = 1000
+	}
 
+	for _, sheet := range sheets {
+		if !sheet.Reserved {
+			event.Remains++
+			event.Sheets[sheet.Rank].Remains++
+		}
 		event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
 	}
 
@@ -918,7 +935,7 @@ func main() {
 	e.GET("/admin/api/reports/sales", func(c echo.Context) error {
 		rows, err := db.Query(`
 		SELECT r.*, e.id as event_id, e.price as event_price
-		FROM reservations r 
+		FROM reservations r
 		INNER JOIN events e on e.id = r.event_id
 		ORDER BY reserved_at ASC
 		for update
