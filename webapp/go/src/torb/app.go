@@ -310,9 +310,7 @@ func fillinAdministrator(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func validateRank(rank string) bool {
-	var count int
-	db.QueryRow("SELECT COUNT(*) FROM sheets WHERE `rank` = ?", rank).Scan(&count)
-	return count > 0
+	return rank == "S" || rank == "A" || rank == "B" || rank == "C"
 }
 
 type Renderer struct {
