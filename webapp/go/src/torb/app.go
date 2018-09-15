@@ -257,16 +257,21 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 
 	event.Total = 1000
 	event.Sheets["S"].Total = 50
+	event.Sheets["S"].Price = event.Price + 5000
+
 	event.Sheets["A"].Total = 150
+	event.Sheets["A"].Price = event.Price + 3000
+
 	event.Sheets["B"].Total = 300
+	event.Sheets["B"].Price = event.Price + 1000
+
 	event.Sheets["C"].Total = 500
+	event.Sheets["C"].Price = event.Price
 	for rows.Next() {
 		var reservation Reservation
 		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID,
 			&reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt)
 		if err == nil {
-			event.Sheets[sheets[reservation.SheetID-1].Rank].Price = event.Price + sheets[reservation.SheetID-1].Price
-
 			sheets[reservation.SheetID-1].Mine = reservation.UserID == loginUserID
 			sheets[reservation.SheetID-1].Reserved = true
 			sheets[reservation.SheetID-1].ReservedAtUnix = reservation.ReservedAt.Unix()
