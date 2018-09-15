@@ -309,12 +309,6 @@ func fillinAdministrator(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func validateRank(rank string) bool {
-	var count int
-	db.QueryRow("SELECT COUNT(*) FROM sheets WHERE `rank` = ?", rank).Scan(&count)
-	return count > 0
-}
-
 type Renderer struct {
 	templates *template.Template
 }
@@ -620,10 +614,6 @@ func main() {
 			return resError(c, "invalid_event", 404)
 		}
 
-		if !validateRank(params.Rank) {
-			return resError(c, "invalid_rank", 400)
-		}
-
 		var sheet Sheet
 		var reservationID int64
 		for {
@@ -686,10 +676,6 @@ func main() {
 			return err
 		} else if !event.PublicFg {
 			return resError(c, "invalid_event", 404)
-		}
-
-		if !validateRank(rank) {
-			return resError(c, "invalid_rank", 404)
 		}
 
 		var sheet Sheet
