@@ -339,7 +339,6 @@ func main() {
 			}
 			SHEETS_TABLE = append(SHEETS_TABLE, sheet)
 		}
-		log.Println(SHEETS_TABLE)
 	}
 
 	e := echo.New()
