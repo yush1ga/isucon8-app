@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -994,16 +993,7 @@ func main() {
 		return err
 	})
 
-	// Domain Socket
-	os.Remove("/tmp/echo.sock")
-	l, err := net.Listen("unix", "/tmp/echo.sock")
-	if err != nil {
-		e.Logger.Fatal(err)
-	}
-	e.Listener = l
-	e.Start("")
-
-	// e.Start(":8080")
+	e.Start(":8080")
 }
 
 type Report struct {
