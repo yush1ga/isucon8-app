@@ -433,17 +433,10 @@ func main() {
 	})
 	e.GET("/api/users/:id", func(c echo.Context) error {
 		var user User
-		if err := db.QueryRow("SELECT id, nickname FROM users WHERE id = ?", c.Param("id")).Scan(&user.ID, &user.Nickname); err != nil {
+		var totalPrice int
+		if err := db.QueryRow("SELECT id, nickname, total_price FROM users WHERE id = ?", c.Param("id")).Scan(&user.ID, &user.Nickname, &totalPrice); err != nil {
 			return err
 		}
-
-		// loginUser, err := getLoginUser(c)
-		// if err != nil {
-		// 	return err
-		// }
-		// if user.ID != loginUser.ID {
-		// 	return resError(c, "forbidden", 403)
-		// }
 
 		rows, err := db.Query(`
 			SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num
@@ -489,12 +482,14 @@ func main() {
 			recentReservations = make([]Reservation, 0)
 		}
 
-		var totalPrice int
-		if err := db.QueryRow("SELECT IFNULL(SUM(e.price + s.price), 0) FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.user_id = ? AND r.canceled_at IS NULL", user.ID).Scan(&totalPrice); err != nil {
-			return err
-		}
-
-		rows, err = db.Query("SELECT event_id FROM reservations WHERE user_id = ? GROUP BY event_id ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC LIMIT 5", user.ID)
+		rows, err = db.Query(`
+			SELECT event_id 
+			reservations 
+			WHERE user_id = ? 
+			GROUP BY event_id 
+			ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC 
+			LIMIT 5
+			`, user.ID)
 		if err != nil {
 			return err
 		}
@@ -649,6 +644,17 @@ func main() {
 				log.Println("re-try: rollback by", err)
 				continue
 			}
+
+			if _, err := tx.Exec(`
+				UPDATE users 
+				SET total_price = total_price + ?
+				WHERE id = ?
+				`, event.Price+sheet.Price, user.ID); err != nil {
+				tx.Rollback()
+				log.Println("re-try: rollback by", err)
+				return err
+			}
+
 			if err := tx.Commit(); err != nil {
 				tx.Rollback()
 				log.Println("re-try: rollback by", err)
@@ -657,6 +663,7 @@ func main() {
 
 			break
 		}
+
 		return c.JSON(202, echo.Map{
 			"id":         reservationID,
 			"sheet_rank": params.Rank,
@@ -717,6 +724,15 @@ func main() {
 		}
 
 		if _, err := tx.Exec("UPDATE reservations SET canceled_at = ? WHERE id = ?", time.Now().UTC().Format("2006-01-02 15:04:05.000000"), reservation.ID); err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if _, err := tx.Exec(`
+			UPDATE users 
+			SET total_price = total_price - ?
+			WHERE id = ?
+			`, event.Price+sheet.Price, user.ID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -1015,4 +1031,28 @@ func resError(c echo.Context, e string, status int) error {
 		status = 500
 	}
 	return c.JSON(status, map[string]string{"error": e})
+}
+
+func updateUserTotalPrice(userID int) error {
+	var totalPrice int
+	if err := db.QueryRow(`
+		SELECT IFNULL(SUM(e.price + s.price), 0)
+		FROM reservations r
+		INNER JOIN sheets s ON s.id = r.sheet_id
+		INNER JOIN events e ON e.id = r.event_id
+		WHERE r.user_id = ? AND r.canceled_at IS NULL
+		`, userID).Scan(&totalPrice); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
+		UPDATE users 
+		SET total_price = ?
+		WHERE id = ?
+		`, totalPrice, userID); err != nil {
+		return err
+	}
+
+	fmt.Println("%d,%d", userID, totalPrice)
+	return nil
 }
