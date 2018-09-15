@@ -957,7 +957,8 @@ func main() {
 		}
 		defer rows.Close()
 
-		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
+		body := bytes.NewBuffer(make([]byte, 15828640))
+		body.WriteString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
 
 		var reservation Reservation
 		var event Event
