@@ -1,1 +1,368 @@
-'use strict';const DOM={appWrapper:$('#app-wrapper'),confirmModal:$('#confirm-modal'),registerModal:$('#register-modal'),loginModal:$('#login-modal'),eventModal:$('#event-modal'),myPageModal:$('#my-page-modal')},Errors={login_required:'\u30ED\u30B0\u30A4\u30F3\u3057\u3066\u304F\u3060\u3055\u3044',duplicated:'\u3059\u3067\u306B\u767B\u9332\u6E08\u3067\u3059',forbidden:'\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093',authentication_failed:'\u8A8D\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F',not_found:'\u5B58\u5728\u3057\u307E\u305B\u3093',invalid_rank:'\u305D\u306E\u30E9\u30F3\u30AF\u3092\u6307\u5B9A\u3059\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093',invalid_event:'\u305D\u306E\u30A4\u30D9\u30F3\u30C8\u3092\u6307\u5B9A\u3059\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093',invalid_sheet:'\u305D\u306E\u30B7\u30FC\u30C8\u3092\u6307\u5B9A\u3059\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093',not_reserved:'\u305D\u306E\u5E2D\u306F\u4E88\u7D04\u3055\u308C\u3066\u3044\u307E\u305B\u3093',not_permitted:'\u305D\u306E\u64CD\u4F5C\u306F\u3067\u304D\u307E\u305B\u3093',unwknown:'\u4E0D\u660E\u306A\u30A8\u30E9\u30FC\u3067\u3059'};function showError(a){const b=Errors[a];setTimeout(()=>{alert(b||a)},300)}function showWaitingDialog(a){return new Promise(b=>{waitingDialog.show(a||'Loading...'),setTimeout(()=>{b()},300)})}function hideWaitingDialog(){waitingDialog.hide()}const API=(()=>{const a=c=>{return 204===c.status?Promise.resolve({}):c.json()},b=c=>{return'error'in c?Promise.reject(c.error):Promise.resolve(c)};return{User:{register(c,f,g){return fetch('/api/users',{method:'POST',headers:new Headers({'Content-Type':'application/json'}),body:JSON.stringify({nickname:c,login_name:f,password:g}),credentials:'same-origin'}).then(a).then(b)},login(c,f){return fetch('/api/actions/login',{method:'POST',headers:new Headers({'Content-Type':'application/json'}),body:JSON.stringify({login_name:c,password:f}),credentials:'same-origin'}).then(a).then(b)},logout(){return fetch('/api/actions/logout',{method:'POST',headers:new Headers({'Content-Type':'application/json'}),body:'{}',credentials:'same-origin'}).then(a).then(b)},getDetails(c){return fetch(`/api/users/${c}`,{method:'GET',credentials:'same-origin'}).then(a).then(b)}},Event:{getAll(){return fetch('/api/events',{method:'GET',credentials:'same-origin'}).then(a).then(b)},getDetails(c){return fetch(`/api/events/${c}`,{method:'GET',credentials:'same-origin'}).then(a).then(b)},reserveSheet(c,f){return fetch(`/api/events/${c}/actions/reserve`,{method:'POST',headers:new Headers({'Content-Type':'application/json'}),body:JSON.stringify({sheet_rank:f}),credentials:'same-origin'}).then(a).then(b)},freeSheet(c,f,g){return fetch(`/api/events/${c}/sheets/${f}/${g}/reservation`,{method:'DELETE',credentials:'same-origin'}).then(a).then(b)}}}})(),ConfirmModal=new Vue({el:'#confirm-modal .modal-dialog',data:{title:'',message:'',callback:null},methods:{ok(){null===this.callback||(this.callback(),this.callback=null,DOM.confirmModal.modal('hide'))}}});function confirm(a,b){return new Promise(c=>{ConfirmModal.$data.title=a,ConfirmModal.$data.message=b,ConfirmModal.$data.callback=c,DOM.confirmModal.modal('show')})}const EventList=new Vue({el:'.events',data(){const a=DOM.appWrapper.data('events');return{events:a,ranks:['S','A','B','C']}},methods:{open(a){openEventModal(a)}}}),EventModal=new Vue({el:'#event-modal .modal-dialog',data(){return{event:{sheets:{S:{},A:{},B:{},C:{}}},ranks:['S','A','B','C']}},methods:{divRange(a,b){const c=Math.floor(a/b),f=[];for(let g=1;g<=c;g++)f.push(g);return f},isSoldOut(a){return 0===this.event.sheets[a].remains},reserveSheet(a){const b=a+'\u5E2D: '+this.event.sheets[a].price+'\u5186\u3092\u4E88\u7D04\u8CFC\u5165\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F';confirm('\u5E2D\u306E\u4E88\u7D04',b).then(()=>{return showWaitingDialog('Processing...')}).then(()=>{return API.Event.reserveSheet(this.event.id,a)}).then(c=>{const f=this.event.sheets[a].detail[c.sheet_num-1];f.reserved=!0,f.mine=!0,this.event.sheets[a].remains--,this.event.remains--,this.$forceUpdate()}).catch(showError).finally(hideWaitingDialog)},freeSheet(a,b){const c=this.event.sheets[a].detail[b-1];if(c.mine){const f='\u4E88\u7D04\u3092\u30AD\u30E3\u30F3\u30BB\u30EB\u3057\u307E\u3059\u304B\uFF1F: '+a+'-'+c.num;confirm('\u4E88\u7D04\u306E\u30AD\u30E3\u30F3\u30BB\u30EB',f).then(()=>{return showWaitingDialog('Processing...')}).then(()=>{return API.Event.freeSheet(this.event.id,a,b)}).then(()=>{c.reserved=!1,c.mine=!1,this.event.sheets[a].remains++,this.event.remains++,this.$forceUpdate()}).catch(showError).finally(hideWaitingDialog)}}}});function updateEventModal(a){return new Promise((b,c)=>{API.Event.getDetails(a).then(f=>{EventModal.$data.event=f,b(f)}).catch(c)})}function openEventModal(a){const b=setInterval(()=>{updateEventModal(a).then(c=>{EventList.$data.events.forEach((f,g,h)=>{f.id!==c.id||(h[g]=c)}),EventList.$forceUpdate()})},1e4);showWaitingDialog().then(()=>updateEventModal(a)).then(()=>{DOM.eventModal.modal('show'),DOM.eventModal.one('hide.bs.modal',()=>clearInterval(b))}).catch(c=>{showError(c),clearInterval(b)}).finally(hideWaitingDialog)}const MyPageModal=new Vue({el:'#my-page-modal .modal-dialog',data(){return{user:{nickname:'',total_price:'',recent_events:[],recent_reservations:[]},ranks:['S','A','B','C']}},methods:{openEvent(a){!a.public||a.closed||(openEventModal(a.id),DOM.myPageModal.modal('hide'))},formatDateTime(a){const b=new Date(1e3*a);return b.toLocaleString()}}});function updateMyPageModal(a){return new Promise((b,c)=>{API.User.getDetails(a).then(f=>{MyPageModal.$data.user=f,b(f)}).catch(c)})}function openMyPageModal(a){showWaitingDialog().then(()=>updateMyPageModal(a)).then(()=>DOM.myPageModal.modal('show')).catch(showError).finally(hideWaitingDialog)}const MenuBar=new Vue({el:'#menu-bar',data(){const a=DOM.appWrapper.data('login-user');return{currentUser:a}},methods:{signUp(){DOM.registerModal.modal('show')},signIn(){DOM.loginModal.modal('show')},signOut(){confirm('\u30B5\u30A4\u30F3\u30A2\u30A6\u30C8','\u672C\u5F53\u306B\u30B5\u30A4\u30F3\u30A2\u30A6\u30C8\u3057\u307E\u3059\u304B?').then(()=>{return API.User.logout()}).then(()=>{this.currentUser=null}).catch(showError)},showMyPage(){openMyPageModal(this.currentUser.id)}}});new Vue({el:'#login-modal .modal-dialog',data(){return{loginName:'',password:''}},methods:{submit(){showWaitingDialog('Processing...').then(()=>{return API.User.login(this.loginName,this.password)}).then(a=>{MenuBar.$data.currentUser=a,DOM.loginModal.modal('hide')}).catch(showError).finally(hideWaitingDialog)}}}),new Vue({el:'#register-modal .modal-dialog',data(){return{nickname:'',loginName:'',password:''}},methods:{submit(){const a=this.loginName,b=this.password;showWaitingDialog('Processing...').then(()=>{return API.User.register(this.nickname,a,b)}).then(()=>{return API.User.login(a,b)}).then(c=>{MenuBar.$data.currentUser=c,DOM.registerModal.modal('hide')}).catch(showError).finally(hideWaitingDialog)}}}),$('body').on('shown.bs.modal','.modal',a=>{$('input',a.target).first().focus()});
+"use strict";
+
+// Note: ES2015 Supported Browsers: https://kangax.github.io/compat-table/es6/
+
+const DOM = {
+  appWrapper: $('#app-wrapper'),
+  confirmModal: $('#confirm-modal'),
+  registerModal: $('#register-modal'),
+  loginModal: $('#login-modal'),
+  eventModal: $('#event-modal'),
+  myPageModal: $('#my-page-modal'),
+};
+
+const Errors = {
+  login_required:        'ログインしてください',
+  duplicated:            'すでに登録済です',
+  forbidden:             '権限がありません',
+  authentication_failed: '認証に失敗しました',
+  not_found:             '存在しません',
+  invalid_rank:          'そのランクを指定することはできません',
+  invalid_event:         'そのイベントを指定することはできません',
+  invalid_sheet:         'そのシートを指定することはできません',
+  not_reserved:          'その席は予約されていません',
+  not_permitted:         'その操作はできません',
+  unwknown:              '不明なエラーです',
+};
+
+function showError(err) {
+  const msg = Errors[err];
+  setTimeout(() => {
+    alert(msg || err);
+  }, 300);
+}
+
+function showWaitingDialog(msg) {
+  return new Promise((resolve, reject) => {
+    waitingDialog.show(msg || 'Loading...');
+    setTimeout(() => {
+      resolve();
+    }, 300);
+  });
+}
+
+function hideWaitingDialog() {
+  waitingDialog.hide();
+}
+
+const API = (() => {
+  const handleJSON = res => {
+    if (res.status === 204) {
+      return Promise.resolve({});
+    }
+    return res.json();
+  };
+
+  const handleJSONError = res => {
+    if ('error' in res) {
+      return Promise.reject(res.error);
+    }
+    return Promise.resolve(res);
+  };
+
+  return {
+    User: {
+      register (nickname, loginName, password) {
+        return fetch('/api/users', {
+          method: 'POST',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ nickname: nickname, login_name: loginName, password: password }),
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      login (loginName, password) {
+        return fetch('/api/actions/login', {
+          method: 'POST',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ login_name: loginName, password: password }),
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      logout () {
+        return fetch('/api/actions/logout', {
+          method: 'POST',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+          body: '{}',
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      getDetails (id) {
+        return fetch(`/api/users/${id}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+    },
+    Event: {
+      getAll () {
+        return fetch('/api/events', {
+          method: 'GET',
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      getDetails (eventId) {
+        return fetch(`/api/events/${eventId}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      reserveSheet (eventId, sheetRank) {
+        return fetch(`/api/events/${eventId}/actions/reserve`, {
+          method: 'POST',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ sheet_rank: sheetRank }),
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+      freeSheet (eventId, sheetRank, sheetNum) {
+        return fetch(`/api/events/${eventId}/sheets/${sheetRank}/${sheetNum}/reservation`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        }).then(handleJSON).then(handleJSONError);
+      },
+    },
+  };
+})();
+
+const ConfirmModal = new Vue({
+  el: '#confirm-modal .modal-dialog',
+  data: {
+    title: '',
+    message: '',
+    callback: null,
+  },
+  methods: {
+    ok () {
+      if (this.callback === null) return;
+
+      this.callback();
+      this.callback = null;
+      DOM.confirmModal.modal('hide');
+    },
+  },
+});
+
+function confirm(title, message) {
+  return new Promise((resolve, reject) => {
+    ConfirmModal.$data.title = title;
+    ConfirmModal.$data.message = message;
+    ConfirmModal.$data.callback = resolve;
+    DOM.confirmModal.modal('show');
+  });
+}
+
+const EventList = new Vue({
+  el: '.events',
+  data () {
+    const events = DOM.appWrapper.data('events');
+    return {
+      events: events,
+      ranks: ['S', 'A', 'B', 'C'],
+    };
+  },
+  methods: {
+    open (eventId) { openEventModal(eventId) },
+  },
+});
+
+const EventModal = new Vue({
+  el: '#event-modal .modal-dialog',
+  data () {
+    return {
+      event: { sheets: { S:{}, A:{}, B:{}, C:{} } },
+      ranks: ['S', 'A', 'B', 'C'],
+    };
+  },
+  methods: {
+    divRange (n ,d) {
+      const max = Math.floor(n / d);
+      const range = [];
+      for (let i = 1; i <= max; i++) {
+        range.push(i);
+      }
+      return range;
+    },
+    isSoldOut (sheetRank) {
+      return this.event.sheets[sheetRank].remains === 0;
+    },
+    reserveSheet (sheetRank) {
+      const message = sheetRank+'席: '+this.event.sheets[sheetRank].price+'円を予約購入します。よろしいですか？';
+      confirm('席の予約', message).then(() => {
+        return showWaitingDialog('Processing...');
+      }).then(() => {
+        return API.Event.reserveSheet(this.event.id, sheetRank);
+      }).then(result => {
+        const sheet = this.event.sheets[sheetRank].detail[result.sheet_num-1];
+        sheet.reserved = true;
+        sheet.mine = true;
+        this.event.sheets[sheetRank].remains--;
+        this.event.remains--;
+        this.$forceUpdate();
+      }).catch(showError).finally(hideWaitingDialog);
+    },
+    freeSheet (sheetRank, sheetNum) {
+      const sheet = this.event.sheets[sheetRank].detail[sheetNum-1];
+      if (!sheet.mine) return;
+
+      const message = '予約をキャンセルしますか？: '+sheetRank+'-'+sheet.num;
+      confirm('予約のキャンセル', message).then(() => {
+        return showWaitingDialog('Processing...');
+      }).then(() => {
+        return API.Event.freeSheet(this.event.id, sheetRank, sheetNum);
+      }).then(() => {
+        sheet.reserved = false;
+        sheet.mine = false;
+        this.event.sheets[sheetRank].remains++;
+        this.event.remains++;
+        this.$forceUpdate();
+      }).catch(showError).finally(hideWaitingDialog);
+    },
+  },
+});
+
+function updateEventModal(eventId) {
+  return new Promise((resolve, reject) => {
+    API.Event.getDetails(eventId).then(event => {
+      EventModal.$data.event = event;
+      resolve(event);
+    }).catch(reject);
+  });
+}
+
+function openEventModal(eventId) {
+  const id = setInterval(() => {
+    updateEventModal(eventId).then(event => {
+      EventList.$data.events.forEach((e, i, events) => {
+        if (e.id !== event.id) return;
+        events[i] = event;
+      });
+      EventList.$forceUpdate();
+    });
+  }, 10000);
+
+  showWaitingDialog().then(() => updateEventModal(eventId)).then(() =>{
+    DOM.eventModal.modal('show');
+    DOM.eventModal.one('hide.bs.modal', () => clearInterval(id));
+  }).catch(err => {
+    showError(err);
+    clearInterval(id);
+  }).finally(hideWaitingDialog);
+}
+
+const MyPageModal = new Vue({
+  el: '#my-page-modal .modal-dialog',
+  data () {
+    return {
+      user: {
+        nickname: '',
+        total_price: '',
+        recent_events: [],
+        recent_reservations: [],
+      },
+      ranks: ['S', 'A', 'B', 'C'],
+    };
+  },
+  methods: {
+    openEvent (event) {
+      if (!event.public || event.closed) {
+        return;
+      }
+      openEventModal(event.id);
+      DOM.myPageModal.modal('hide');
+    },
+    formatDateTime(epoch) {
+      const dt = new Date(epoch * 1000);
+      return dt.toLocaleString();
+    },
+  },
+});
+
+function updateMyPageModal(userId) {
+  return new Promise((resolve, reject) => {
+    API.User.getDetails(userId).then(user => {
+      MyPageModal.$data.user = user;
+      resolve(user);
+    }).catch(reject);
+  });
+}
+
+function openMyPageModal(userId) {
+  showWaitingDialog().then(() => updateMyPageModal(userId)).then(() => DOM.myPageModal.modal('show')).catch(showError).finally(hideWaitingDialog);
+}
+
+const MenuBar = new Vue({
+  el: '#menu-bar',
+  data () {
+    const currentUser = DOM.appWrapper.data('login-user');
+    return {
+      currentUser: currentUser,
+    };
+  },
+  methods: {
+    signUp () {
+      DOM.registerModal.modal('show');
+    },
+    signIn () {
+      DOM.loginModal.modal('show');
+    },
+    signOut () {
+      confirm('サインアウト', '本当にサインアウトしますか?').then(() => {
+        return API.User.logout();
+      }).then(() => {
+        this.currentUser = null;
+      }).catch(showError);
+    },
+    showMyPage() {
+      openMyPageModal(this.currentUser.id);
+    },
+  },
+});
+
+new Vue({
+  el: '#login-modal .modal-dialog',
+  data () {
+    return {
+      loginName: '',
+      password: '',
+    };
+  },
+  methods: {
+    submit () {
+      showWaitingDialog('Processing...').then(() => {
+        return API.User.login(this.loginName, this.password);
+      }).then(user => {
+        MenuBar.$data.currentUser = user;
+        DOM.loginModal.modal('hide');
+      }).catch(showError).finally(hideWaitingDialog);
+    },
+  },
+});
+
+new Vue({
+  el: '#register-modal .modal-dialog',
+  data () {
+    return {
+      nickname: '',
+      loginName: '',
+      password: '',
+    };
+  },
+  methods: {
+    submit () {
+      const loginName = this.loginName;
+      const password = this.password;
+      showWaitingDialog('Processing...').then(() => {
+        return API.User.register(this.nickname, loginName, password);
+      }).then(() => {
+        return API.User.login(loginName, password);
+      }).then(user => {
+        MenuBar.$data.currentUser = user;
+        DOM.registerModal.modal('hide');
+      }).catch(showError).finally(hideWaitingDialog);
+    },
+  },
+});
+
+$('body').on('shown.bs.modal', '.modal', e => {
+  $('input', e.target).first().focus();
+});
