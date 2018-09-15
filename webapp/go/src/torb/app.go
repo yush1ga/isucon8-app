@@ -247,7 +247,7 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 
 		var reservation Reservation
 		err := db.QueryRow(`
-		SELECT * 
+		SELECT *
 		FROM reservations
 		WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL
 		HAVING reserved_at = MIN(reserved_at)
@@ -265,6 +265,76 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		event.Total = 1000
 
 		event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
+	}
+
+	return &event, nil
+}
+
+func getEventsTop(all bool) ([]*Event, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Commit()
+
+	rows, err := tx.Query("SELECT * FROM events ORDER BY id ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*Event
+	for rows.Next() {
+		var event Event
+		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+			return nil, err
+		}
+		if !all && !event.PublicFg {
+			continue
+		}
+		events = append(events, &event)
+	}
+	for i, v := range events {
+		event, err := getEventTop(v.ID, -1)
+		if err != nil {
+			return nil, err
+		}
+		for k := range event.Sheets {
+			event.Sheets[k].Detail = nil
+		}
+		events[i] = event
+	}
+	return events, nil
+}
+
+func getEventTop(eventID, loginUserID int64) (*Event, error) {
+	var event Event
+	if err := db.QueryRow("SELECT * FROM events WHERE id = ?", eventID).Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+		return nil, err
+	}
+	event.Sheets = map[string]*Sheets{
+		"S": &Sheets{},
+		"A": &Sheets{},
+		"B": &Sheets{},
+		"C": &Sheets{},
+	}
+
+	rows, err := db.Query("SELECT * FROM sheets ORDER BY `rank`, num")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sheet Sheet
+		if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
+			return nil, err
+		}
+		event.Sheets[sheet.Rank].Price = event.Price + sheet.Price
+		event.Total++
+		event.Sheets[sheet.Rank].Total++
+
+		// reservationはいらない
 	}
 
 	return &event, nil
@@ -355,7 +425,7 @@ func main() {
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Output: os.Stderr}))
 	e.Static("/", "public")
 	e.GET("/", func(c echo.Context) error {
-		events, err := getEvents(false)
+		events, err := getEventsTop(false)
 		if err != nil {
 			return err
 		}
