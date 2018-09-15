@@ -485,7 +485,7 @@ func main() {
 
 		rows, err = db.Query(`
 			SELECT event_id 
-			reservations 
+			FROM reservations
 			WHERE user_id = ? 
 			GROUP BY event_id 
 			ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC 
