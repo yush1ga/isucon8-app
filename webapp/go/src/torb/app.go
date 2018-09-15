@@ -995,8 +995,8 @@ func main() {
 	})
 
 	// Domain Socket
-	os.Remove("/home/isucon/echo.sock")
-	l, err := net.Listen("unix", "/home/isucon/echo.sock")
+	os.Remove("/tmp/echo.sock")
+	l, err := net.Listen("unix", "/tmp/echo.sock")
 	if err != nil {
 		e.Logger.Fatal(err)
 	}
