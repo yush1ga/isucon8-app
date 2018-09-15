@@ -249,7 +249,6 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 	SELECT *
 	FROM reservations
 	WHERE event_id = ? AND canceled_at IS NULL
-	HAVING reserved_at = MIN(reserved_at)
 	`, event.ID)
 	if err != nil {
 		return nil, err
