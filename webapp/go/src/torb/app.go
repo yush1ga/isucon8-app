@@ -934,10 +934,24 @@ func main() {
 		return err
 	}, adminLoginRequired)
 	e.GET("/admin/api/reports/sales", func(c echo.Context) error {
-		rows, err := db.Query(`
-		SELECT r.*, e.id as event_id, e.price as event_price
+		rows, err := db.Query("SELECT price FROM events ORDER BY id ASC")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		eventPrices := make([]int64, 0, 20)
+		for rows.Next() {
+			var price int64
+			if err := rows.Scan(&price); err != nil {
+				return err
+			}
+			eventPrices = append(eventPrices, price)
+		}
+
+		rows, err = db.Query(`
+		SELECT r.*
 		FROM reservations r
-		INNER JOIN events e on e.id = r.event_id
 		ORDER BY reserved_at ASC
 		for update
 		`)
@@ -949,20 +963,20 @@ func main() {
 		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
 
 		var reservation Reservation
-		var event Event
 		for rows.Next() {
-			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &event.ID, &event.Price); err != nil {
+			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt); err != nil {
 				return err
 			}
 			sheet := SHEETS_TABLE[reservation.SheetID-1]
+
 			v := Report{
 				ReservationID: reservation.ID,
-				EventID:       event.ID,
+				EventID:       reservation.EventID,
 				Rank:          sheet.Rank,
 				Num:           sheet.Num,
 				UserID:        reservation.UserID,
 				SoldAt:        reservation.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
-				Price:         event.Price + sheet.Price,
+				Price:         eventPrices[reservation.EventID-1] + sheet.Price,
 			}
 			if reservation.CanceledAt != nil {
 				v.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
