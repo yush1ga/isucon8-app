@@ -243,7 +243,6 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 			return nil, err
 		}
 		event.Sheets[sheet.Rank].Price = event.Price + sheet.Price
-		event.Total++
 		event.Sheets[sheet.Rank].Total++
 
 		var reservation Reservation
@@ -263,6 +262,7 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		} else {
 			return nil, err
 		}
+		event.Total = 1000
 
 		event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
 	}
