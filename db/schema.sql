@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS users (
     nickname    VARCHAR(128) NOT NULL,
     login_name  VARCHAR(128) NOT NULL,
     pass_hash   VARCHAR(128) NOT NULL,
-    `total_price` int(11) NOT NULL DEFAULT '0',
     UNIQUE KEY login_name_uniq (login_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
