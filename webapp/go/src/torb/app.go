@@ -231,21 +231,12 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		"C": &Sheets{},
 	}
 
-	sheets := []Sheet{}
-	rows, err := db.Query("SELECT * FROM sheets ORDER BY `id`, num")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var sheet Sheet
-		if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
-			return nil, err
-		}
-		sheets = append(sheets, sheet)
+	sheets := make([]Sheet, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		sheets = append(sheets, SHEETS_TABLE[i])
 	}
 
-	rows, err = db.Query(`
+	rows, err := db.Query(`
 	SELECT *
 	FROM reservations
 	WHERE event_id = ? AND canceled_at IS NULL
