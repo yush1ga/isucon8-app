@@ -324,6 +324,7 @@ var db *sql.DB
 var SHEETS_TABLE = make([]Sheet, 0, 1000)
 
 func main() {
+	time.Sleep(7 * time.Second)
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
 		os.Getenv("DB_USER"), os.Getenv("DB_PASS"),
 		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"),
@@ -486,11 +487,11 @@ func main() {
 		}
 
 		rows, err = db.Query(`
-			SELECT event_id 
+			SELECT event_id
 			FROM reservations
-			WHERE user_id = ? 
-			GROUP BY event_id 
-			ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC 
+			WHERE user_id = ?
+			GROUP BY event_id
+			ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC
 			LIMIT 5
 			`, user.ID)
 		if err != nil {
@@ -650,7 +651,7 @@ func main() {
 			}
 
 			if _, err := tx.Exec(`
-				UPDATE users 
+				UPDATE users
 				SET total_price = total_price + ?
 				WHERE id = ?
 				`, event.Price+sheet.Price, user.ID); err != nil {
@@ -733,7 +734,7 @@ func main() {
 		}
 
 		if _, err := tx.Exec(`
-			UPDATE users 
+			UPDATE users
 			SET total_price = total_price - ?
 			WHERE id = ?
 			`, event.Price+sheet.Price, user.ID); err != nil {
@@ -1050,7 +1051,7 @@ func updateUserTotalPrice(userID int) error {
 	}
 
 	if _, err := db.Exec(`
-		UPDATE users 
+		UPDATE users
 		SET total_price = ?
 		WHERE id = ?
 		`, totalPrice, userID); err != nil {
