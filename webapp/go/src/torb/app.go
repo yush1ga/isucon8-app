@@ -11,9 +11,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -857,20 +855,29 @@ func main() {
 			return err
 		}
 
-		rows, err := db.Query("SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.event_id = ? ORDER BY reserved_at ASC FOR UPDATE", event.ID)
+		rows, err := db.Query(`
+		SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price
+		FROM reservations r
+		INNER JOIN sheets s ON s.id = r.sheet_id
+		INNER JOIN events e ON e.id = r.event_id
+		WHERE r.event_id = ?
+		ORDER BY reserved_at ASC
+		FOR UPDATE
+		`, event.ID)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 
-		var reports []Report
+		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
+
+		var reservation Reservation
+		var sheet Sheet
 		for rows.Next() {
-			var reservation Reservation
-			var sheet Sheet
 			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.Price); err != nil {
 				return err
 			}
-			report := Report{
+			v := Report{
 				ReservationID: reservation.ID,
 				EventID:       event.ID,
 				Rank:          sheet.Rank,
@@ -880,28 +887,43 @@ func main() {
 				Price:         event.Price + sheet.Price,
 			}
 			if reservation.CanceledAt != nil {
-				report.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
+				v.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
 			}
-			reports = append(reports, report)
+
+			body.WriteString(fmt.Sprintf("%d,%d,%s,%d,%d,%d,%s,%s\n",
+				v.ReservationID, v.EventID, v.Rank, v.Num, v.Price, v.UserID, v.SoldAt, v.CanceledAt))
 		}
-		return renderReportCSV(c, reports)
+
+		c.Response().Header().Set("Content-Type", `text/csv; charset=UTF-8`)
+		c.Response().Header().Set("Content-Disposition", `attachment; filename="report.csv"`)
+		_, err = io.Copy(c.Response(), body)
+
+		return err
 	}, adminLoginRequired)
 	e.GET("/admin/api/reports/sales", func(c echo.Context) error {
-		rows, err := db.Query("select r.*, s.rank as sheet_rank, s.num as sheet_num, s.price as sheet_price, e.id as event_id, e.price as event_price from reservations r inner join sheets s on s.id = r.sheet_id inner join events e on e.id = r.event_id order by reserved_at asc for update")
+		rows, err := db.Query(`
+		SELECT r.*, s.rank as sheet_rank, s.num as sheet_num, s.price as sheet_price, e.id as event_id, e.price as event_price
+		FROM reservations r 
+		INNER JOIN sheets s on s.id = r.sheet_id
+		INNER JOIN events e on e.id = r.event_id
+		ORDER BY reserved_at ASC
+		for update
+		`)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 
-		var reports []Report
+		body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
+
+		var reservation Reservation
+		var sheet Sheet
+		var event Event
 		for rows.Next() {
-			var reservation Reservation
-			var sheet Sheet
-			var event Event
 			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
 				return err
 			}
-			report := Report{
+			v := Report{
 				ReservationID: reservation.ID,
 				EventID:       event.ID,
 				Rank:          sheet.Rank,
@@ -911,12 +933,19 @@ func main() {
 				Price:         event.Price + sheet.Price,
 			}
 			if reservation.CanceledAt != nil {
-				report.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
+				v.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
 			}
-			reports = append(reports, report)
+
+			body.WriteString(fmt.Sprintf("%d,%d,%s,%d,%d,%d,%s,%s\n",
+				v.ReservationID, v.EventID, v.Rank, v.Num, v.Price, v.UserID, v.SoldAt, v.CanceledAt))
 		}
-		return renderReportCSV(c, reports)
-	}, adminLoginRequired)
+
+		c.Response().Header().Set("Content-Type", `text/csv; charset=UTF-8`)
+		c.Response().Header().Set("Content-Disposition", `attachment; filename="report.csv"`)
+		_, err = io.Copy(c.Response(), body)
+
+		return err
+	})
 
 	e.Start(":8080")
 }
@@ -930,21 +959,6 @@ type Report struct {
 	SoldAt        string
 	CanceledAt    string
 	Price         int64
-}
-
-func renderReportCSV(c echo.Context, reports []Report) error {
-	sort.Slice(reports, func(i, j int) bool { return strings.Compare(reports[i].SoldAt, reports[j].SoldAt) < 0 })
-
-	body := bytes.NewBufferString("reservation_id,event_id,rank,num,price,user_id,sold_at,canceled_at\n")
-	for _, v := range reports {
-		body.WriteString(fmt.Sprintf("%d,%d,%s,%d,%d,%d,%s,%s\n",
-			v.ReservationID, v.EventID, v.Rank, v.Num, v.Price, v.UserID, v.SoldAt, v.CanceledAt))
-	}
-
-	c.Response().Header().Set("Content-Type", `text/csv; charset=UTF-8`)
-	c.Response().Header().Set("Content-Disposition", `attachment; filename="report.csv"`)
-	_, err := io.Copy(c.Response(), body)
-	return err
 }
 
 func resError(c echo.Context, e string, status int) error {
