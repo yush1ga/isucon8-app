@@ -325,6 +325,7 @@ func (r *Renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
 
 var db *sql.DB
 var SHEETS_TABLE = make([]Sheet, 0, 1000)
+var SHEETS_TABLE_RANK_NUM = map[string]map[int64]Sheet{}
 
 func main() {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
@@ -351,6 +352,8 @@ func main() {
 				log.Fatal(err)
 			}
 			SHEETS_TABLE = append(SHEETS_TABLE, sheet)
+			SHEETS_TABLE_RANK_NUM[sheet.Rank] = map[int64]Sheet{}
+			SHEETS_TABLE_RANK_NUM[sheet.Rank][sheet.Num] = sheet
 		}
 	}
 
@@ -692,12 +695,19 @@ func main() {
 			return resError(c, "invalid_rank", 404)
 		}
 
-		var sheet Sheet
-		if err := db.QueryRow("SELECT * FROM sheets WHERE `rank` = ? AND num = ?", rank, num).Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
-			if err == sql.ErrNoRows {
-				return resError(c, "invalid_sheet", 404)
-			}
+		sheet_rank, ok := SHEETS_TABLE_RANK_NUM[rank]
+		if !ok {
+			return resError(c, "invalid_sheet", 404)
+		}
+
+		numint64, err := strconv.ParseInt(num, 10, 64)
+		if err != nil {
 			return err
+		}
+
+		sheet, ok := sheet_rank[numint64]
+		if !ok {
+			return resError(c, "invalid_sheet", 404)
 		}
 
 		tx, err := db.Begin()
