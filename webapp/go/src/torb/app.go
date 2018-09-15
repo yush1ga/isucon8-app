@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -334,19 +333,19 @@ func main() {
 	var err error
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
-		log.Fatal(err)
+		// log.Fatal(err)
 	}
 
 	if len(SHEETS_TABLE) == 0 {
 		rows, err := db.Query("SELECT * FROM sheets ORDER BY id ASC")
 		if err != nil {
-			log.Fatal(err)
+			// log.Fatal(err)
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var sheet Sheet
 			if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
-				log.Fatal(err)
+				// log.Fatal(err)
 			}
 			SHEETS_TABLE = append(SHEETS_TABLE, sheet)
 		}
@@ -640,18 +639,18 @@ func main() {
 			res, err := tx.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at) VALUES (?, ?, ?, ?)", event.ID, sheet.ID, user.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000000"))
 			if err != nil {
 				tx.Rollback()
-				log.Println("re-try: rollback by", err)
+				// log.Println("re-try: rollback by", err)
 				continue
 			}
 			reservationID, err = res.LastInsertId()
 			if err != nil {
 				tx.Rollback()
-				log.Println("re-try: rollback by", err)
+				// log.Println("re-try: rollback by", err)
 				continue
 			}
 			if err := tx.Commit(); err != nil {
 				tx.Rollback()
-				log.Println("re-try: rollback by", err)
+				// log.Println("re-try: rollback by", err)
 				continue
 			}
 
